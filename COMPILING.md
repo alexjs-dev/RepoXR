@@ -1,5 +1,8 @@
 # Compiling
 
+> **This fork (R.E.P.O. v0.5.4)** needs the .NET SDK 10.0 or higher, and compiles against your own copy of the game: create
+> `RepoXR.csproj.user` first, as described in the [README](README.md#build-from-source).
+
 ## Initial setup
 
 We recommend using Visual Studio with the .NET development features to compile this project. You can [download Visual Studio here](https://visualstudio.microsoft.com/downloads/). You should use the Community edition as that one is free.

@@ -1,3 +1,10 @@
+# 1.2.3 for R.E.P.O. v0.5.4 (unofficial fork)
+
+- Ported to R.E.P.O. v0.5.4 (Unity 6), based on the v0.5.0 port by crimecock and the v0.5.2 update by largoz
+- Object rotation, menu pointing and vehicle input updated for v0.5.4
+- The Discord and YouTube buttons in the main menu are hidden in VR
+- See [docs/repo-0.5.4-port.md](docs/repo-0.5.4-port.md) for what changed and why
+
 # 1.2.3
 
 **Changes**:

@@ -32,12 +32,5 @@ internal static class Experiments
     {
         __result = true;
     }
-
-    [HarmonyPatch(typeof(SemiFunc), nameof(SemiFunc.DebugDev))]
-    [HarmonyPostfix]
-    private static void IAmASurgeonIMeanDeveloper(ref bool __result)
-    {
-        __result = true;
-    }
 }
 #endif

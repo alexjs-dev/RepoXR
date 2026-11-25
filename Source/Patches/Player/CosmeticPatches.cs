@@ -60,17 +60,23 @@ internal static class CosmeticPatches
     [HarmonyTranspiler]
     private static IEnumerable<CodeInstruction> InstantiateCosmeticVRPatch(IEnumerable<CodeInstruction> instructions)
     {
-        return new CodeMatcher(instructions)
-            .MatchForward(true,
+        // The call is preceded by `ldarg.0; ldloc.s <closure>; ldfld _cosmeticAsset`, reuse the closure loads so we don't
+        // depend on compiler generated local indices and class names
+        var matcher = new CodeMatcher(instructions)
+            .MatchForward(false,
                 new CodeMatch(OpCodes.Call,
                     Method(typeof(PlayerCosmetics), nameof(PlayerCosmetics.InstantiateCosmetic))))
+            .ThrowIfInvalid("Could not find InstantiateCosmetic call");
+
+        var loadClosure = matcher.InstructionAt(-2).Clone();
+        var loadAsset = matcher.InstructionAt(-1).Clone();
+
+        return matcher
             .Advance(1)
             .InsertAndAdvance(
                 new CodeInstruction(OpCodes.Ldarg_0), // this
-                new CodeInstruction(OpCodes.Ldloc_S, Plugin.GameDebugBuild ? 24 : 14), // locals0
-                new CodeInstruction(OpCodes.Ldfld,
-                    Field(Inner(typeof(PlayerCosmetics), "<>c__DisplayClass57_0"),
-                        "_cosmeticAsset")), // _cosmeticAsset,
+                loadClosure, // locals0
+                loadAsset, // _cosmeticAsset
                 new CodeInstruction(OpCodes.Ldloc_1), // _newEquipped
                 new CodeInstruction(OpCodes.Call,
                     ((Action<PlayerCosmetics, CosmeticAsset, List<Cosmetic>>)InstantiateCosmeticVR).Method)

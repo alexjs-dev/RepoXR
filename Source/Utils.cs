@@ -86,6 +86,105 @@ internal static class Utils
         return $"""<sprite name="{id}">""";
     }
 
+    /// <summary>
+    /// Makes sure a text can draw <see cref="GetControlSpriteString"/>'s VR controller icons. R.E.P.O. 0.5.0 gives
+    /// its keybind texts its own glyph sprite assets (keyboard, gamepads), which have none of them: the names did not
+    /// resolve and the controls page showed question marks. RepoXR's input sprite asset becomes the text's sprite asset
+    /// when it has none, or a fallback of the one it has
+    /// </summary>
+    /// <summary>
+    /// RepoXR's controller icons (TMPInputsSpriteAsset) were made with the TextMeshPro of Unity 2022, which kept the
+    /// sprites' places on the sheet in m_SpriteGlyphTable. Unity 6's TextMeshPro reads m_GlyphTable, the asset came up
+    /// with no glyphs, its name lookup stayed empty (a sprite is only listed when its glyph is found) and every
+    /// &lt;sprite name=...&gt; was drawn as a "?". The sheet is a plain grid of 100 px cells, glyph 0 at the top left, so
+    /// the glyphs are put back from that when they are missing
+    /// </summary>
+    public static void RepairSpriteAsset(TMPro.TMP_SpriteAsset? asset)
+    {
+        if (!asset)
+            return;
+
+        var characters = asset!.spriteCharacterTable;
+        var glyphs = asset.spriteGlyphTable;
+        var sheet = asset.spriteSheet;
+        Logger.LogInfo($"[UI] Sprite asset {asset.name}: {characters?.Count ?? -1} characters, {glyphs?.Count ?? -1} glyphs, " +
+                       $"sheet {(sheet ? $"{sheet.width}x{sheet.height}" : "none")}");
+
+        if (characters is { Count: > 0 } && sheet && (glyphs == null || glyphs.Count < characters.Count))
+        {
+            const int cell = 100;
+            var columns = Mathf.Max(1, sheet.width / cell);
+            var rows = Mathf.Max(1, sheet.height / cell);
+            var have = new HashSet<uint>((glyphs ?? []).Select(glyph => glyph.index));
+            var table = glyphs ?? [];
+            foreach (var character in characters)
+            {
+                var index = character.glyphIndex;
+                if (!have.Add(index))
+                    continue;
+
+                var rect = new UnityEngine.TextCore.GlyphRect((int)(index % columns) * cell,
+                    (rows - 1 - (int)(index / columns)) * cell, cell, cell);
+                table.Add(new TMPro.TMP_SpriteGlyph(index, new UnityEngine.TextCore.GlyphMetrics(cell, cell, 0, 80, cell), rect, 1,
+                    0));
+            }
+
+            if (glyphs == null)
+                AccessTools.Field(typeof(TMPro.TMP_SpriteAsset), "m_GlyphTable").SetValue(asset, table);
+            Logger.LogInfo($"[UI] Sprite asset {asset.name}: rebuilt {table.Count} glyphs from the {columns}x{rows} sheet");
+        }
+
+        // The material (and the asset's hash code) were serialized as "material"/"hashCode" too, Unity 6's TextMeshPro
+        // reads m_Material/m_HashCode: without a material no sprite is drawn. The game's own sprite material (EmojiOne,
+        // TextMeshPro/Sprite) is copied onto RepoXR's sheet
+        // These are fields in the TextMeshPro that we compile against, but properties in the one from the game
+        var materialField = AccessTools.Field(typeof(TMPro.TMP_Asset), "m_Material");
+        var materialHashField = AccessTools.Field(typeof(TMPro.TMP_Asset), "m_MaterialHashCode");
+        var hashField = AccessTools.Field(typeof(TMPro.TMP_Asset), "m_HashCode");
+
+        if (!(Material)materialField.GetValue(asset) && sheet)
+        {
+            var defaultAsset = TMPro.TMP_Settings.defaultSpriteAsset;
+            var template = defaultAsset ? (Material)materialField.GetValue(defaultAsset) : null;
+            var shader = template ? template!.shader : Shader.Find("TextMeshPro/Sprite");
+            if (shader)
+            {
+                var material = template ? new Material(template) : new Material(shader);
+                material.name = asset.name + " Material";
+                material.mainTexture = sheet;
+                materialField.SetValue(asset, material);
+                materialHashField.SetValue(asset, TMPro.TMP_TextUtilities.GetSimpleHashCode(material.name));
+            }
+        }
+
+        if ((int)hashField.GetValue(asset) == 0)
+            hashField.SetValue(asset, TMPro.TMP_TextUtilities.GetSimpleHashCode(asset.name));
+
+        asset.UpdateLookupTables();
+        Logger.LogInfo($"[UI] Sprite asset {asset.name}: 'leftStick' → {asset.GetSpriteIndexFromName("leftStick")}, " +
+                       $"'rightTrigger' → {asset.GetSpriteIndexFromName("rightTrigger")}");
+    }
+
+    public static void EnsureVRSprites(TMPro.TMP_Text? text)
+    {
+        var sprites = Assets.AssetCollection.TMPInputsSpriteAsset;
+        if (!text || !sprites)
+            return;
+
+        if (!text!.spriteAsset)
+        {
+            text.spriteAsset = sprites;
+            return;
+        }
+
+        if (text.spriteAsset == sprites)
+            return;
+
+        text.spriteAsset.fallbackSpriteAssets ??= [];
+        if (!text.spriteAsset.fallbackSpriteAssets.Contains(sprites))
+            text.spriteAsset.fallbackSpriteAssets.Add(sprites);
+    }
+
     public static bool GetControlHand(string controlPath, out HapticManager.Hand hand)
     {
         hand = HapticManager.Hand.Both;
@@ -181,7 +280,17 @@ internal static class Utils
     /// <summary>
     /// Resolve a translation key to it's localized value
     /// </summary>
-    public static LocalizedAsset L(string name) => AssetCollection.GetLocalizedAsset(name).WaitForCompletion();
+    public static LocalizedAsset? L(string name)
+    {
+        if (!AssetCollection.TranslationsLoaded)
+            return null;
+
+        var handle = AssetCollection.GetLocalizedAsset(name);
+        handle.WaitForCompletion();
+        return handle.Status == UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationStatus.Succeeded
+            ? handle.Result
+            : null;
+    }
 
     public class WaitUntilTimeout(Func<bool> predicate, float timeout) : CustomYieldInstruction
     {

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 using Photon.Pun;
@@ -24,7 +25,8 @@ internal static class InventoryPatches
     /// </summary>
     [HarmonyPatch(typeof(ItemEquippable), nameof(ItemEquippable.AnimateEquip), MethodType.Enumerator)]
     [HarmonyTranspiler]
-    private static IEnumerable<CodeInstruction> MinimumScaleEquip(IEnumerable<CodeInstruction> instructions)
+    private static IEnumerable<CodeInstruction> MinimumScaleEquip(IEnumerable<CodeInstruction> instructions,
+        MethodBase original)
     {
         // In release: instance is `ldloc.1`
         // In debug: instance is `this.<>4__this`
@@ -34,7 +36,7 @@ internal static class InventoryPatches
             [
                 new CodeInstruction(OpCodes.Ldarg_0),
                 new CodeInstruction(OpCodes.Ldfld,
-                    Field(Inner(typeof(ItemEquippable), "<AnimateEquip>d__55"), "<>4__this"))
+                    Field(original.DeclaringType, "<>4__this"))
             ]
             : [new CodeInstruction(OpCodes.Ldloc_1)];
 
@@ -59,7 +61,8 @@ internal static class InventoryPatches
     /// </summary>
     [HarmonyPatch(typeof(ItemEquippable), nameof(ItemEquippable.AnimateUnequip), MethodType.Enumerator)]
     [HarmonyTranspiler]
-    private static IEnumerable<CodeInstruction> UnequipGrabImmediately(IEnumerable<CodeInstruction> instructions)
+    private static IEnumerable<CodeInstruction> UnequipGrabImmediately(IEnumerable<CodeInstruction> instructions,
+        MethodBase original)
     {
         // In release: instance is `ldloc.1`
         // In debug: instance is `this.<>4__this`
@@ -69,7 +72,7 @@ internal static class InventoryPatches
             [
                 new CodeInstruction(OpCodes.Ldarg_0),
                 new CodeInstruction(OpCodes.Ldfld,
-                    Field(Inner(typeof(ItemEquippable), "<AnimateUnequip>d__53"), "<>4__this"))
+                    Field(original.DeclaringType, "<>4__this"))
             ]
             : [new CodeInstruction(OpCodes.Ldloc_1)];
 

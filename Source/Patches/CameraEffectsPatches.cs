@@ -17,7 +17,7 @@ internal static class CameraEffectsPatches
     /// <summary>
     /// Disable camera shake in the main menu
     /// </summary>
-    [HarmonyPatch(typeof(CameraShake), nameof(CameraShake.Shake))]
+    [HarmonyPatch(typeof(CameraShake), nameof(CameraShake.Shake), [typeof(float), typeof(float), typeof(float)])]
     [HarmonyPrefix]
     private static bool DisableShakeMenu()
     {

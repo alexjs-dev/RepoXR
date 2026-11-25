@@ -9,6 +9,7 @@ using RepoXR.Managers;
 using RepoXR.Networking;
 using RepoXR.Player;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 using static HarmonyLib.AccessTools;
 
@@ -104,54 +105,42 @@ internal static class PhysGrabberPatches
     /// <summary>
     /// Make the object turning input use the controller inputs instead of mouse inputs
     /// </summary>
-    [HarmonyPatch(typeof(PhysGrabber), nameof(PhysGrabber.ObjectTurning))]
+    [HarmonyPatch(typeof(PhysGrabber), nameof(PhysGrabber.ObjectTurnAccelerationGet))]
     [HarmonyTranspiler]
     private static IEnumerable<CodeInstruction> ObjectTurningPatches(IEnumerable<CodeInstruction> instructions)
     {
         return new CodeMatcher(instructions)
-            // Use VR controls for rotation instead of mouse inputs
-            .MatchForward(false, new CodeMatch(OpCodes.Ldstr, "Mouse X"))
-            .RemoveInstructions(10)
-            .Insert(
-                // TESTER: Check these operands in Debug vs Release builds
-                new CodeInstruction(OpCodes.Ldloca_S, Plugin.GameDebugBuild ? 13 : 5), // Mouse X
-                new CodeInstruction(OpCodes.Ldloca_S, Plugin.GameDebugBuild ? 14 : 6), // Mouse Y
-                new CodeInstruction(OpCodes.Call, Method(typeof(PhysGrabberPatches), nameof(GetRotationInput)))
-            )
+            .MatchForward(false,
+                new CodeMatch(OpCodes.Callvirt, Method(typeof(InputManager), nameof(InputManager.LookInputGet))))
+            .ThrowIfInvalid("Could not find LookInputGet")
+            .SetAndAdvance(OpCodes.Call, Method(typeof(PhysGrabberPatches), nameof(GetRotationInput)))
             .InstructionEnumeration();
     }
 
-    private static void GetRotationInput(out float x, out float y)
+    private static Vector2 GetRotationInput(InputManager manager, out InputDevice? device, bool useStickTravel)
     {
-        var input = Actions.Instance["Rotation"].ReadValue<Vector2>();
+        // No device, so the game doesn't apply its gamepad or mouse specific scaling
+        device = null;
 
-        x = input.x;
-        y = input.y;
+        return Actions.Instance["Rotation"].ReadValue<Vector2>();
     }
 
     /// <summary>
     /// Allow a custom override to disable object turning
     /// </summary>
-    [HarmonyPatch(typeof(PhysGrabber), nameof(PhysGrabber.ObjectTurning))]
+    [HarmonyPatch(typeof(PhysGrabber), nameof(PhysGrabber.ObjectTurningInputUpdate))]
     [HarmonyTranspiler]
     private static IEnumerable<CodeInstruction> DisableTurningPatch(IEnumerable<CodeInstruction> instructions)
     {
-        var matcher = new CodeMatcher(instructions)
+        return new CodeMatcher(instructions)
             .MatchForward(false, new CodeMatch(OpCodes.Call, Method(typeof(SemiFunc), nameof(SemiFunc.InputHold))))
-            .Advance(1);
-
-        var jmp = matcher.Instruction;
-
-        matcher.Advance(1).InsertAndAdvance(
-            new CodeInstruction(OpCodes.Call, PropertyGetter(typeof(VRSession), nameof(VRSession.Instance))),
-            new CodeInstruction(OpCodes.Callvirt, PropertyGetter(typeof(VRSession), nameof(VRSession.Player))),
-            new CodeInstruction(OpCodes.Ldfld, Field(typeof(VRPlayer), nameof(VRPlayer.disableRotateTimer))),
-            new CodeInstruction(OpCodes.Ldc_R4, 0f),
-            new CodeInstruction(OpCodes.Bgt_Un_S, jmp.operand)
-        );
-
-        return matcher
+            .ThrowIfInvalid("Could not find InputHold")
+            .Advance(1)
+            .InsertAndAdvance(new CodeInstruction(OpCodes.Call, ((Func<bool, bool>)CanRotate).Method))
             .InstructionEnumeration();
+
+        static bool CanRotate(bool rotateHeld) =>
+            rotateHeld && VRSession.Instance is { } session && session.Player.disableRotateTimer <= 0;
     }
 
     /// <summary>
@@ -174,15 +163,25 @@ internal static class PhysGrabberPatches
     /// <summary>
     /// Make sure the force grab timer also works in VR, where the grab key is the same as the "take from inventory" key
     /// </summary>
-    [HarmonyPatch(typeof(PhysGrabber), nameof(PhysGrabber.Update))]
+    // R.E.P.O. 0.5.0 moved the toggle-grab release (`if (toggleGrab && !(mountedVehicleGrab || grabHeld) &&
+    // !GameplayManager.instance.itemUnequipAutoHold) toggleGrab = false`) out of PhysGrabber.Update into
+    // GrabInputActiveGet(grabHeld, grabDown, ...). Matched against Update, the anchor was missing and the old Advance(-2)
+    // put the call into Update's grabDisableTimer countdown instead, which then never reached 0: grabbing stayed disabled.
+    // Here grabHeld (ldarg.1) goes through ShouldToggleGrabOff, as it did in Update before.
+    [HarmonyPatch(typeof(PhysGrabber), nameof(PhysGrabber.GrabInputActiveGet))]
     [HarmonyTranspiler]
     private static IEnumerable<CodeInstruction> ForceHoldPatch(IEnumerable<CodeInstruction> instructions)
     {
         return new CodeMatcher(instructions)
             .MatchForward(false,
+                new CodeMatch(OpCodes.Ldarg_1),
+                new CodeMatch(OpCodes.Or),
+                new CodeMatch(i => i.opcode == OpCodes.Brtrue || i.opcode == OpCodes.Brtrue_S),
+                new CodeMatch(OpCodes.Ldsfld, Field(typeof(GameplayManager), nameof(GameplayManager.instance))),
                 new CodeMatch(OpCodes.Ldfld,
                     Field(typeof(GameplayManager), nameof(GameplayManager.itemUnequipAutoHold))))
-            .Advance(-2)
+            .ThrowIfInvalid("PhysGrabber.GrabInputActiveGet: toggle-grab release not found")
+            .Advance(1)
             .InsertAndAdvance(
                 new CodeInstruction(OpCodes.Ldarg_0),
                 new CodeInstruction(OpCodes.Ldfld, Field(typeof(PhysGrabber), nameof(PhysGrabber.overrideGrabTimer))),
@@ -235,14 +234,20 @@ internal static class PhysGrabberUniversalPatches
     /// <summary>
     /// Make our tumble climb follow our hand rotation instead of the camera rotation
     /// </summary>
-    [HarmonyPatch(typeof(PhysGrabber), nameof(PhysGrabber.GrabStateClimb))]
+    // R.E.P.O. 0.5.0: the climb rotation moved out of GrabStateClimb into ClimbTargetUpdate, which starts from the
+    // climb stick's rotation (`var rotation = climbStickTransform.rotation`); that read becomes the hand's rotation.
+    // (Matched against GrabStateClimb, which no longer calls Quaternion.Angle, the old Advance(-5) cut into its end and
+    // IL2CPP refused the method)
+    [HarmonyPatch(typeof(PhysGrabber), nameof(PhysGrabber.ClimbTargetUpdate))]
     [HarmonyTranspiler]
     private static IEnumerable<CodeInstruction> HandBasedTumbleClimbPatch(IEnumerable<CodeInstruction> instructions)
     {
         return new CodeMatcher(instructions)
             .MatchForward(false,
-                new CodeMatch(OpCodes.Call, Method(typeof(Quaternion), nameof(Quaternion.Angle))))
-            .Advance(-5)
+                new CodeMatch(OpCodes.Ldfld, Field(typeof(PhysGrabber), nameof(PhysGrabber.climbStickTransform))),
+                new CodeMatch(OpCodes.Callvirt, PropertyGetter(typeof(Transform), nameof(Transform.rotation))),
+                new CodeMatch(OpCodes.Stloc_0))
+            .ThrowIfInvalid("PhysGrabber.ClimbTargetUpdate: climbStickTransform.rotation not found")
             .SetAndAdvance(OpCodes.Call, ((Func<PhysGrabber, Quaternion>)GetRotation).Method)
             .RemoveInstruction()
             .InstructionEnumeration();
@@ -261,5 +266,32 @@ internal static class PhysGrabberUniversalPatches
                 ? networkPlayer.PrimaryHand.rotation * Quaternion.Euler(0, 180, 0)
                 : grabber.climbStickTransform.rotation;
         }
+    }
+
+    /// <summary>
+    /// R.E.P.O. 0.5.0 moved the end of object rotation into ObjectTurningRelease, which stores the new rotation relative
+    /// to the camera; RepoXR applies it relative to the hand, so a rotated object jumped when the rotate button was
+    /// let go. Same for ForceGrabPhysObject (items and vehicles the game makes you hold), which measured the grab from
+    /// the camera while every other grab starts from the hand
+    /// </summary>
+    [HarmonyPatch(typeof(PhysGrabber), nameof(PhysGrabber.ObjectTurningRelease))]
+    [HarmonyTranspiler]
+    private static IEnumerable<CodeInstruction> TurningReleaseFromHandPatch(IEnumerable<CodeInstruction> instructions) =>
+        HandInsteadOfCamera(instructions, "PhysGrabber.ObjectTurningRelease");
+
+    [HarmonyPatch(typeof(PhysGrabber), nameof(PhysGrabber.ForceGrabPhysObject))]
+    [HarmonyTranspiler]
+    private static IEnumerable<CodeInstruction> ForceGrabFromHandPatch(IEnumerable<CodeInstruction> instructions) =>
+        HandInsteadOfCamera(instructions, "PhysGrabber.ForceGrabPhysObject");
+
+    private static IEnumerable<CodeInstruction> HandInsteadOfCamera(IEnumerable<CodeInstruction> instructions, string where)
+    {
+        return new CodeMatcher(instructions)
+            .MatchForward(false,
+                new CodeMatch(OpCodes.Callvirt,
+                    Method(typeof(PlayerLocalCamera), nameof(PlayerLocalCamera.GetOverrideTransform))))
+            .ThrowIfInvalid($"{where}: GetOverrideTransform not found")
+            .Repeat(matcher => matcher.Set(OpCodes.Call, PlayerLocalCameraExtensions.GetHandOverrideTransformMethod))
+            .InstructionEnumeration();
     }
 }

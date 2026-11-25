@@ -107,6 +107,18 @@ public class Config(string assemblyPath, ConfigFile file)
     public ConfigEntry<bool> VehicleHeadForward { get; } = file.Create("Input", nameof(VehicleHeadForward), false,
         "When enabled, will make the scooters go forward based on head rotation instead of hand rotation.");
 
+    [ConfigDescriptor(customName: "Whip Sideways Sensitivity", pointerSize: 0.05f, stepSize: 0.1f)]
+    public ConfigEntry<float> WhipSidewaysSensitivity { get; } = file.Create("Input", nameof(WhipSidewaysSensitivity),
+        0.5f, new ConfigDescription(
+            "How much a sideways swing of the hand counts for the whip's gestures. Lower: the fling needs a wider, faster swing.",
+            new AcceptableValueRange<float>(0.1f, 1.5f)));
+
+    [ConfigDescriptor(customName: "Whip Crack Sensitivity", pointerSize: 0.05f, stepSize: 0.1f)]
+    public ConfigEntry<float> WhipCrackSensitivity { get; } = file.Create("Input", nameof(WhipCrackSensitivity),
+        1f, new ConfigDescription(
+            "How much an up and down swing of the hand counts for the whip's gestures. Lower: the crack needs a wider, faster swing.",
+            new AcceptableValueRange<float>(0.1f, 1.5f)));
+
     // Rendering configuration
 
     [ConfigDescriptor(stepSize: 5f, suffix: "%")]
@@ -114,6 +126,10 @@ public class Config(string assemblyPath, ConfigFile file)
         new ConfigDescription(
             "This setting configures the resolution scale of the game, lower values are more performant, but will make the game look worse.",
             new AcceptableValueRange<int>(5, 200)));
+
+    [ConfigDescriptor(customName: "Shop Mirror")]
+    public ConfigEntry<bool> ShopMirror { get; } = file.Create("Rendering", nameof(ShopMirror), true,
+        "Shows the mirror next to the cosmetic machine in the shop. It renders the scene once more for each eye; turn it off for frame rate.");
 
     [ConfigDescriptor]
     public ConfigEntry<bool> Vignette { get; } = file.Create("Rendering", nameof(Vignette), true,

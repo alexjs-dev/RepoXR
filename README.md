@@ -1,63 +1,96 @@
-# R.E.P.O. VR Mod
+# RepoXR for R.E.P.O. v0.5.4 (unofficial fork)
 
-[![Thunderstore Version](https://img.shields.io/thunderstore/v/DaXcess/RepoXR?style=for-the-badge&logo=thunderstore&logoColor=white)](https://thunderstore.io/c/repo/p/DaXcess/RepoXR)
-[![GitHub Version](https://img.shields.io/github/v/release/DaXcess/RepoXR?style=for-the-badge&logo=github)](https://github.com/DaXcess/RepoXR/releases/latest)
-[![Thunderstore Downloads](https://img.shields.io/thunderstore/dt/DaXcess/RepoXR?style=for-the-badge&logo=thunderstore&logoColor=white)](https://thunderstore.io/c/repo/p/DaXcess/RepoXR)
-[![GitHub Downloads](https://img.shields.io/github/downloads/DaXcess/RepoXR/total?style=for-the-badge&logo=github)](https://github.com/DaXcess/RepoXR/releases/latest)
-<br />
-[![Release Build](https://img.shields.io/github/actions/workflow/status/DaXcess/RepoXR/build-release.yaml?branch=main&style=for-the-badge&label=RELEASE)](https://github.com/DaXcess/RepoXR/actions/workflows/build-release.yaml)
-[![Debug Build](https://img.shields.io/github/actions/workflow/status/DaXcess/RepoXR/build-debug.yaml?branch=dev&style=for-the-badge&label=DEBUG)](https://github.com/DaXcess/RepoXR/actions/workflows/build-debug.yaml)
+This is an unofficial fork of [RepoXR](https://github.com/DaXcess/RepoXR), the R.E.P.O. VR mod by DaXcess. The original
+RepoXR 1.2.3 supports R.E.P.O. v0.4.4; **this fork works with R.E.P.O. v0.5.4** (Unity 6).
 
-**RepoXR** is a fully fledged R.E.P.O. VR mod that adds full 6-DoF motion controlled VR support to R.E.P.O.
+Please report problems with this fork here, not to DaXcess. Once RepoXR officially supports your game version, use the
+[original](https://thunderstore.io/c/repo/p/DaXcess/RepoXR) instead.
 
-The mod is powered by Unity's OpenXR plugin and is thereby compatible with a wide range of headsets, controllers and runtimes, like Oculus, Virtual Desktop, SteamVR and many more!
+| This fork | R.E.P.O. | Game engine |
+|-----------|----------|-------------|
+| RepoXR 1.2.3 + v0.5.4 port | **v0.5.4** | Unity 6000.3.28 |
 
-RepoXR is compatible with multiplayer and works in a lobby comprised of both flatscreen **and** VR players. Running this mod without having a VR headset will allow you to see the arm movements of any VR semibots in the same lobby, all while still being compatible with vanilla clients (even if the host is using no mods, though there is a small catch with that).
+**Tested:** starting in VR through SteamVR with Touch controllers, menu pointing and clicking, and loading into
+singleplayer. Other parts (shop, guns, vehicles, multiplayer...) are ported but not specifically tested yet.
 
-### Discord Server
+## What you need
 
-Facing issues, have some mod (in)compatibility to report or just want to hang out?
+- R.E.P.O. v0.5.4 on Steam (Windows)
+- A PC VR headset and [SteamVR](https://store.steampowered.com/app/250820/SteamVR/)
+- [r2modman](https://thunderstore.io/c/repo/p/ebkr/r2modman/) (or another Thunderstore mod manager)
+- These mods, from the mod manager:
 
-You can join the [Discord Server](https://discord.gg/2DxNgpPZUF)!
+| Mod | Version | Why |
+|-----|---------|-----|
+| [BepInExPack](https://thunderstore.io/c/repo/p/BepInEx/BepInExPack/) | 5.4.2305 | Loads mods |
+| [FixPluginTypesSerialization](https://thunderstore.io/c/repo/p/DaXcess/FixPluginTypesSerialization/) | **1.1.3** or newer | Needed for the VR assets, 1.1.3 added this game version |
+| [RepoXR](https://thunderstore.io/c/repo/p/DaXcess/RepoXR/) | 1.2.3 | VR libraries and assets, its code gets replaced by this fork |
 
-# Compatibility
+## Install
 
-At the time of writing, no explicit compatibility exists yet for RepoXR, so you will have to manually figure out what mod works in VR and which ones don't.
+1. In r2modman, select R.E.P.O. and create a new profile.
+2. In *Online*, install **RepoXR** 1.2.3. It also installs BepInExPack and FixPluginTypesSerialization. Check the versions
+   above.
+3. Build this fork (see [Build from source](#build-from-source)).
+4. In r2modman, open *Settings* → *Browse profile folder*, and replace these files with the ones you built:
 
-# Installing and using the mod
+   | Built file (`bin/Release/netstandard2.1/`) | Replaces (in the profile folder) |
+   |---|---|
+   | `RepoXR.dll` | `BepInEx/plugins/DaXcess-RepoXR/RepoXR/RepoXR.dll` |
+   | `RepoXR.Preload.dll` | `BepInEx/patchers/DaXcess-RepoXR/RepoXR/RepoXR.Preload.dll` |
 
-It is recommended to use a mod launcher like Gale to easily download and install the mod. You can download Gale [here](https://kesomannen.com/gale). This mod can be found on thunderstore under the name [RepoXR](https://thunderstore.io/c/repo/p/DaXcess/RepoXR). You can also install the mod by manually downloading it in combination with BepInEx.
+Reinstalling or updating RepoXR in the mod manager puts the original files back, so repeat step 4 afterwards.
 
-Running the mod using Gale can be done simply by clicking "Launch game", which will automagically launch the game with the installed mods.
+## Start the game
 
-For more information on using the mod, check out the [RepoXR Thunderstore page](https://thunderstore.io/c/repo/p/DaXcess/RepoXR).
+1. Turn on your headset and connect it to **SteamVR**. Wait until SteamVR shows the headset and both controllers.
+2. In r2modman, select the profile and press **Start modded**.
+3. Put on the headset, point at the menu and press the trigger.
 
-# Versions
+**The view follows your head, but the controllers do nothing:** SteamVR blocks controller input while its dashboard is
+open, and can open it when a non-VR game starts. Close the dashboard with the menu button. To prevent it, open *SteamVR
+Settings*, set *Advanced Settings* to *Show*, and turn off *Dashboard* → *Present Non-VR Applications on Theater Screen
+Upon Launch*.
 
-Here is a list of RepoXR versions and which version(s) of R.E.P.O. it supports
+**The game does not start in VR:** make sure SteamVR is running before the game starts, then look at
+`BepInEx/LogOutput.log` in the profile folder.
 
-| RepoXR | R.E.P.O. Version |
-|--------|------------------|
-| v1.2.3 | v0.4.4           |
-| v1.2.2 | v0.4.3           |
-| v1.2.1 | v0.4.3           |
-| v1.2.0 | v0.4.3           |
-| v1.1.2 | v0.3.0 - v0.3.2  |
-| v1.1.1 | v0.3.0 - v0.3.1  |
-| v1.1.0 | v0.3.0 - v0.3.1  |
-| v1.0.3 | v0.2.1           |
-| v1.0.2 | v0.2.1           |
-| v1.0.1 | v0.2.1           |
-| v1.0.0 | v0.2.0           |
+## Build from source
 
-> RepoXR dynamically measures compatibility with the game during startup, meaning newer R.E.P.O. versions might be supported even though they aren't listed here.
+Needs the [.NET SDK 10.0](https://dotnet.microsoft.com/download/dotnet/10.0) and R.E.P.O. v0.5.4 installed.
 
-# Install from source
+1. Create a file named `RepoXR.csproj.user` next to `RepoXR.csproj`, with the path to your game:
 
-> The easiest way to install the mod is by downloading it from Thunderstore. You only need to follow these steps if you are planning on installing the mod by building the source code and without a mod manager.
+   ```xml
+   <Project>
+       <PropertyGroup>
+           <USE_TESTER>true</USE_TESTER>
+           <TesterGamePath>C:\Program Files (x86)\Steam\steamapps\common\REPO</TesterGamePath>
+       </PropertyGroup>
+   </Project>
+   ```
 
-To install the mod from the source code, you will first have to compile the mod. Instructions for this are available in [COMPILING.md](COMPILING.md).
+2. Build it:
 
-Next up you'll need to grab a copy of a previous release of RepoXR either from [Releases](https://github.com/DaXcess/RepoXR/releases) or from [Thunderstore](https://thunderstore.io/c/repo/p/DaXcess/RepoXR) (manual download). Extract this zip file and replace the `LCVR.dll` and/or the `LCVR.Preload.dll` files with the new files that you obtained after following the guide in [COMPILING.md](COMPILING.md).
+   ```sh
+   dotnet build RepoXR.csproj -c Release
+   ```
 
-You can *also* manually build the required plugins, asset bundles and addressables by cloning the [RepoXR-Unity](https://github.com/DaXcess/RepoXR-Unity) and performing the necessary steps (which I am not planning on documenting).
+The files are in `bin/Release/netstandard2.1/`.
+
+## How it works
+
+[docs/repo-0.5.4-port.md](docs/repo-0.5.4-port.md) explains the concept, what R.E.P.O. v0.5.x changed, and what this port
+does about it.
+
+Known issue: RepoXR's translated tutorial texts do not load on Unity 6. English texts are built in, other languages keep
+the game's own.
+
+## Credits and license
+
+- [DaXcess](https://github.com/DaXcess/RepoXR): RepoXR
+- [crimecock](https://github.com/crimecock/RepoXR): the port to R.E.P.O. v0.5.0, which most of this fork is based on
+- [largoz](https://github.com/largoz/RepoXR): the update to v0.5.2
+- [Dobutsu](https://github.com/Dobutsu/repo-quest-vr): the Quest port that parts of the v0.5.0 port come from
+
+Licensed under the [GPL-3.0](LICENSE), like the original.

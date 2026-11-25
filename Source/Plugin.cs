@@ -22,7 +22,7 @@ public class Plugin : BaseUnityPlugin
     public const string PLUGIN_NAME = "RepoXR";
     public const string PLUGIN_VERSION = "1.2.3";
 
-    public const string SUPPORTED_GAME_VERSION = "v0.4.4";
+    public const string SUPPORTED_GAME_VERSION = "v0.5.4";
 
     public new static Config Config { get; private set; } = null!;
     public static Flags Flags { get; private set; } = 0;
@@ -68,6 +68,15 @@ public class Plugin : BaseUnityPlugin
             return;
         }
 
+        try
+        {
+            HarmonyPatcher.PatchClass(typeof(OpenXRCompatPatches));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning($"Failed to apply OpenXR compatibility patches: {ex.Message}");
+        }
+
         if (!disableVr && InitializeVR())
             Flags |= Flags.VR;
 
@@ -87,7 +96,7 @@ public class Plugin : BaseUnityPlugin
         Native.BringGameWindowToFront();
         Config.SetupGlobalCallbacks();
 
-        SceneManager.sceneLoaded += (scene, _) => UniversalEntrypoint.OnSceneLoad(scene.name);
+        SceneManager.sceneLoaded += (scene, mode) => UniversalEntrypoint.OnSceneLoad(scene, mode);
     }
 
     public static string GetCommitHash()

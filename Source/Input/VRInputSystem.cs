@@ -182,6 +182,10 @@ public class VRInputSystem : MonoBehaviour
                 return control.defaultToggle;
             }
 
+        // Holding on to a vehicle has its own toggle in v0.5.0 (on by default), and uses the Grab action in VR
+        if (action == "VehicleGrab")
+            return true;
+
         // If all else fails: default to hold
         return false;
     }
