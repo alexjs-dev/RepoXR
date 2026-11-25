@@ -13,38 +13,72 @@ Please report problems with this fork here, not to DaXcess. Once RepoXR official
 **Tested:** starting in VR through SteamVR with Touch controllers, menu pointing and clicking, and loading into
 singleplayer. Other parts (shop, guns, vehicles, multiplayer...) are ported but not specifically tested yet.
 
-## What you need
+## Easy install (Windows)
 
-- R.E.P.O. v0.5.4 on Steam (Windows)
-- A PC VR headset and [SteamVR](https://store.steampowered.com/app/250820/SteamVR/)
-- [r2modman](https://thunderstore.io/c/repo/p/ebkr/r2modman/) (or another Thunderstore mod manager)
-- These mods, from the mod manager:
+You need R.E.P.O. v0.5.4 on Steam, a PC VR headset with [SteamVR](https://store.steampowered.com/app/250820/SteamVR/), and
+preferably [r2modman](https://thunderstore.io/c/repo/p/ebkr/r2modman/) (start it once and select R.E.P.O.). Close R.E.P.O.
+and r2modman, then use **one** of these:
+
+**Batch file**
+
+1. Download this repository: green *Code* button → *Download ZIP*, or
+   [this link](https://github.com/alexjs-dev/RepoXR/archive/refs/heads/main.zip).
+2. Extract the ZIP (do not run it from inside the ZIP).
+3. Double-click **`install.bat`**. If Windows warns about it, choose *More info* → *Run anyway*.
+
+**PowerShell command**
+
+Open PowerShell (Start menu → type `powershell`) and paste:
+
+```powershell
+irm https://raw.githubusercontent.com/alexjs-dev/RepoXR/main/install.ps1 | iex
+```
+
+Both do the same:
+
+- find R.E.P.O. and your mod manager, and create the profile **RepoXR-v0.5.4** (other profiles are not touched);
+- download BepInExPack, FixPluginTypesSerialization and RepoXR from Thunderstore, and check their SHA-256 hashes;
+- install this fork's DLLs from [`dist`](dist), and compare the installed files with the published hashes.
+
+Without r2modman or Thunderstore Mod Manager, the mod goes straight into the game folder, and you start R.E.P.O. from Steam.
+
+More options (with the downloaded repository):
+
+| Command | What it does |
+|---|---|
+| `install.bat -ProfileName MyProfile` | Installs into another profile |
+| `install.bat -Target Game` | Installs into the game folder |
+| `install.bat -GamePath "D:\Games\REPO"` | If the game is not found |
+| `install.bat -Check` | Only compares the installed DLLs with the published build |
+
+`install.bat` lets PowerShell run `install.ps1` by setting `-ExecutionPolicy Bypass` for that one process. Your system setting
+does not change.
+
+## What gets installed
 
 | Mod | Version | Why |
 |-----|---------|-----|
 | [BepInExPack](https://thunderstore.io/c/repo/p/BepInEx/BepInExPack/) | 5.4.2305 | Loads mods |
-| [FixPluginTypesSerialization](https://thunderstore.io/c/repo/p/DaXcess/FixPluginTypesSerialization/) | **1.1.3** or newer | Needed for the VR assets, 1.1.3 added this game version |
-| [RepoXR](https://thunderstore.io/c/repo/p/DaXcess/RepoXR/) | 1.2.3 | VR libraries and assets, its code gets replaced by this fork |
+| [FixPluginTypesSerialization](https://thunderstore.io/c/repo/p/DaXcess/FixPluginTypesSerialization/) | 1.1.3 | Needed for the VR assets, 1.1.3 added this game version |
+| [RepoXR](https://thunderstore.io/c/repo/p/DaXcess/RepoXR/) | 1.2.3 | VR libraries and assets |
+| This fork (`RepoXR.dll`, `RepoXR.Preload.dll`) | v0.5.4 port | Replaces the code of RepoXR 1.2.3 |
 
-## Install
+### Install by hand
 
-1. In r2modman, select R.E.P.O. and create a new profile.
-2. In *Online*, install **RepoXR** 1.2.3. It also installs BepInExPack and FixPluginTypesSerialization. Check the versions
-   above.
-3. Build this fork (see [Build from source](#build-from-source)).
-4. In r2modman, open *Settings* → *Browse profile folder*, and replace these files with the ones you built:
+1. In r2modman, create a profile and install **RepoXR** 1.2.3 from *Online*. Check the versions above.
+2. Open *Settings* → *Browse profile folder*, and replace these files with the ones from [`dist`](dist):
 
-   | Built file (`bin/Release/netstandard2.1/`) | Replaces (in the profile folder) |
+   | File | Replaces (in the profile folder) |
    |---|---|
    | `RepoXR.dll` | `BepInEx/plugins/DaXcess-RepoXR/RepoXR/RepoXR.dll` |
    | `RepoXR.Preload.dll` | `BepInEx/patchers/DaXcess-RepoXR/RepoXR/RepoXR.Preload.dll` |
 
-Reinstalling or updating RepoXR in the mod manager puts the original files back, so repeat step 4 afterwards.
+Reinstalling or updating RepoXR in the mod manager puts the original files back. Run the installer again afterwards.
 
 ## Start the game
 
 1. Turn on your headset and connect it to **SteamVR**. Wait until SteamVR shows the headset and both controllers.
-2. In r2modman, select the profile and press **Start modded**.
+2. In r2modman, select the profile **RepoXR-v0.5.4** and press **Start modded**.
 3. Put on the headset, point at the menu and press the trigger.
 
 **The view follows your head, but the controllers do nothing:** SteamVR blocks controller input while its dashboard is
@@ -57,26 +91,20 @@ Upon Launch*.
 
 ## Build from source
 
-Needs the [.NET SDK 10.0](https://dotnet.microsoft.com/download/dotnet/10.0) and R.E.P.O. v0.5.4 installed.
+The DLLs in [`dist`](dist) are built from this source. To build them yourself, you need the
+[.NET SDK 10.0](https://dotnet.microsoft.com/download/dotnet/10.0) and R.E.P.O. v0.5.4 installed. In PowerShell, in the
+downloaded repository:
 
-1. Create a file named `RepoXR.csproj.user` next to `RepoXR.csproj`, with the path to your game:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build.ps1
+```
 
-   ```xml
-   <Project>
-       <PropertyGroup>
-           <USE_TESTER>true</USE_TESTER>
-           <TesterGamePath>C:\Program Files (x86)\Steam\steamapps\common\REPO</TesterGamePath>
-       </PropertyGroup>
-   </Project>
-   ```
+It finds the game (or use `-GamePath`), builds both DLLs into `bin/Release/netstandard2.1/`, and compares their SHA-256 hashes
+with [`dist/SHA256SUMS`](dist/SHA256SUMS). Unchanged source, built with the SDK version in [`dist/BUILD.txt`](dist/BUILD.txt)
+and R.E.P.O. v0.5.4, gives the same hashes. `build.ps1 -Publish` puts your own build and its hashes into `dist`, so
+`install.bat` installs it.
 
-2. Build it:
-
-   ```sh
-   dotnet build RepoXR.csproj -c Release
-   ```
-
-The files are in `bin/Release/netstandard2.1/`.
+Share only `RepoXR.dll` and `RepoXR.Preload.dll`: the build folder also contains copies of the game's own files.
 
 ## How it works
 
