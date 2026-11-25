@@ -34,22 +34,28 @@ Open PowerShell (Start menu → type `powershell`) and paste:
 irm https://raw.githubusercontent.com/alexjs-dev/RepoXR/main/install.ps1 | iex
 ```
 
-Both do the same:
+Both look for the game and the mod manager in the usual places: the Steam libraries, common folders on every drive, and the
+default folders of r2modman and Thunderstore Mod Manager. **Only if something is not found, they ask for it:**
 
-- find R.E.P.O. and your mod manager, and create the profile **RepoXR-v0.5.4** (other profiles are not touched);
-- download BepInExPack, FixPluginTypesSerialization and RepoXR from Thunderstore, and check their SHA-256 hashes;
-- install this fork's DLLs from [`dist`](dist), and compare the installed files with the published hashes.
+- **The game folder**: the folder with `REPO.exe`, or your Steam library folder. In Steam: right-click R.E.P.O. → *Manage* →
+  *Browse local files*.
+- **The r2modman folder**: in r2modman, *Settings* → *Browse data folder*. Without a mod manager, type `none`: the mod then
+  goes into the game folder, and you start R.E.P.O. from Steam.
 
-Without r2modman or Thunderstore Mod Manager, the mod goes straight into the game folder, and you start R.E.P.O. from Steam.
+The mod goes into a profile named `RepoXR-v0.5.4`, which is created if needed. Other profiles are not touched. The installer
+
+- downloads BepInExPack, FixPluginTypesSerialization and RepoXR from Thunderstore, and checks their SHA-256 hashes;
+- installs this fork's DLLs from [`dist`](dist), and compares the installed files with the published hashes.
 
 More options (with the downloaded repository):
 
 | Command | What it does |
 |---|---|
+| `install.bat -GamePath "D:\Games\REPO" -ModManagerPath "E:\r2modman"` | Uses these folders |
 | `install.bat -ProfileName MyProfile` | Installs into another profile |
 | `install.bat -Target Game` | Installs into the game folder |
-| `install.bat -GamePath "D:\Games\REPO"` | If the game is not found |
 | `install.bat -Check` | Only compares the installed DLLs with the published build |
+| `install.bat -Yes` | Never asks |
 
 `install.bat` lets PowerShell run `install.ps1` by setting `-ExecutionPolicy Bypass` for that one process. Your system setting
 does not change.

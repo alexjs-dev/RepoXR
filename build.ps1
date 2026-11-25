@@ -29,7 +29,8 @@ if (-not $GamePath) {
     $GamePath = $roots | ForEach-Object { Join-Path $_ 'steamapps\common\REPO' } |
         Where-Object { Test-Path -LiteralPath (Join-Path $_ 'REPO.exe') } | Select-Object -First 1
 }
-if (-not $GamePath) { throw 'R.E.P.O. was not found. Use -GamePath with the folder of REPO.exe.' }
+if (-not $GamePath) { $GamePath = (Read-Host 'R.E.P.O. was not found. Path of the folder with REPO.exe').Trim().Trim('"') }
+if (-not $GamePath -or -not (Test-Path -LiteralPath (Join-Path $GamePath 'REPO.exe'))) { throw "REPO.exe was not found in '$GamePath'. Use -GamePath." }
 
 # The commit is part of the DLL: the published hashes can only be reproduced with the commit they were built from
 $info = Join-Path $dist 'BUILD.txt'

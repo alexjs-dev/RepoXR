@@ -1,19 +1,25 @@
 # Installs RepoXR for R.E.P.O. v0.5.4 with everything it needs: BepInExPack, FixPluginTypesSerialization, RepoXR 1.2.3 (VR
 # libraries and assets) and the DLLs of this fork. Every file is checked against a SHA-256 hash. See README.md.
 #
-#   .\install.ps1                          r2modman (new profile "RepoXR-v0.5.4"), or the game folder without a mod manager
-#   .\install.ps1 -ProfileName MyProfile   another profile (created if needed)
-#   .\install.ps1 -Target Game             straight into the game folder
-#   .\install.ps1 -Check                   only compare an installation with the published hashes
+#   .\install.ps1                          finds the game and the mod manager, asks for a folder only if it is not found
+#   .\install.ps1 -Yes                     never asks
+#   .\install.ps1 -Check                   only compares an installation with the published hashes
+#
+#   -GamePath       the folder of REPO.exe (a Steam library folder works too)
+#   -ModManagerPath the data folder of r2modman or Thunderstore Mod Manager (its profiles folder or a profile works too)
+#   -ProfileName    the profile to install into, created if needed
+#   -Target Game    without a mod manager, straight into the game folder
 param(
     [ValidateSet('Auto', 'ModManager', 'Game')][string]$Target = 'Auto',
-    [string]$ProfileName = 'RepoXR-v0.5.4',
-    [string]$ProfilesPath,
+    [string]$ProfileName,
+    [Alias('ProfilesPath')][string]$ModManagerPath,
     [string]$GamePath,
-    [switch]$Check
+    [switch]$Check,
+    [switch]$Yes
 )
 
 $scriptRoot = $PSScriptRoot
+if ($env:OS -ne 'Windows_NT') { throw 'This installer is for Windows.' }
 
 & {
     $ErrorActionPreference = 'Stop'
@@ -40,24 +46,58 @@ $scriptRoot = $PSScriptRoot
 
     function Get-Sha256([string]$Path) { (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
 
+    # What people paste: quotes, variables, spaces around it
+    function Get-CleanPath([string]$Path) {
+        $clean = [Environment]::ExpandEnvironmentVariables($Path.Trim().Trim('"', "'").Trim())
+        if ($clean.Length -gt 3) { $clean = $clean.TrimEnd('\', '/') }
+        $clean
+    }
+
+    # The folder of REPO.exe, from that folder, REPO.exe itself, or a Steam (library) folder
+    function Resolve-Game([string]$Path) {
+        $clean = Get-CleanPath $Path
+        if (-not $clean) { return $null }
+        if ($clean -like '*.exe') { $clean = Split-Path $clean }
+        $candidates = @($clean)
+        foreach ($steamapps in "$clean\steamapps", $clean, "$clean\SteamLibrary\steamapps") {
+            $manifest = "$steamapps\appmanifest_3241660.acf"
+            if (Test-Path -LiteralPath $manifest) {
+                $match = [regex]::Match([IO.File]::ReadAllText($manifest), '"installdir"\s+"([^"]+)"')
+                if ($match.Success) { $candidates += "$steamapps\common\$($match.Groups[1].Value)" }
+            }
+        }
+        $candidates += "$clean\REPO", "$clean\common\REPO", "$clean\steamapps\common\REPO", "$clean\SteamLibrary\steamapps\common\REPO"
+        foreach ($candidate in $candidates) {
+            if (Test-Path -LiteralPath "$candidate\REPO.exe" -PathType Leaf) { return [IO.Path]::GetFullPath($candidate) }
+        }
+        return $null
+    }
+
     function Find-Game {
         $roots = @()
-        foreach ($key in 'HKCU:\Software\Valve\Steam', 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam') {
+        foreach ($key in 'HKCU:\Software\Valve\Steam', 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam', 'HKLM:\SOFTWARE\Valve\Steam') {
             $steam = Get-ItemProperty $key -ErrorAction SilentlyContinue
             foreach ($path in $steam.SteamPath, $steam.InstallPath) { if ($path) { $roots += $path } }
         }
         foreach ($root in @($roots)) {
             $vdf = Join-Path $root 'steamapps\libraryfolders.vdf'
             if (Test-Path -LiteralPath $vdf) {
-                foreach ($match in [regex]::Matches((Get-Content -LiteralPath $vdf -Raw), '"path"\s+"([^"]+)"')) {
+                foreach ($match in [regex]::Matches([IO.File]::ReadAllText($vdf), '"path"\s+"([^"]+)"')) {
                     $roots += $match.Groups[1].Value.Replace('\\', '\')
                 }
             }
         }
-        foreach ($root in $roots) {
-            $game = Join-Path $root 'steamapps\common\REPO'
-            if (Test-Path -LiteralPath (Join-Path $game 'REPO.exe')) { return (Resolve-Path -LiteralPath $game).Path }
+        # The usual places on every drive
+        foreach ($drive in [IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' -and $_.IsReady }) {
+            foreach ($folder in 'SteamLibrary', 'Steam', 'Games\Steam', 'Games\SteamLibrary', 'Program Files (x86)\Steam', 'Program Files\Steam') {
+                $roots += Join-Path $drive.RootDirectory.FullName $folder
+            }
         }
+        foreach ($root in $roots) {
+            $game = Resolve-Game $root
+            if ($game) { return $game }
+        }
+        return $null
     }
 
     function Get-GameVersion([string]$Path) {
@@ -68,10 +108,51 @@ $scriptRoot = $PSScriptRoot
         if ($match.Success) { $match.Groups[1].Value }
     }
 
-    function Find-Profiles {
-        foreach ($root in "$env:APPDATA\r2modmanPlus-local", "$env:APPDATA\Thunderstore Mod Manager\DataFolder") {
-            if (Test-Path -LiteralPath $root) { return (Join-Path $root 'REPO\profiles') }
+    # The folder with the R.E.P.O. profiles (and the profile, if that was given), from any folder of the mod manager
+    function Resolve-ModManager([string]$Path) {
+        $clean = Get-CleanPath $Path
+        if (-not $clean -or -not (Test-Path -LiteralPath $clean -PathType Container)) { return $null }
+        $clean = [IO.Path]::GetFullPath($clean)
+        $leaf = Split-Path $clean -Leaf
+        $parent = Split-Path $clean
+        if ($leaf -eq 'profiles') { return @{ Profiles = $clean } }
+        if ($parent -and (Split-Path $parent -Leaf) -eq 'profiles') { return @{ Profiles = $parent; Profile = $leaf } }
+        foreach ($data in $clean, "$clean\DataFolder") {
+            if (Test-Path -LiteralPath "$data\REPO") { return @{ Profiles = "$data\REPO\profiles" } }
         }
+        if ($leaf -eq 'REPO' -and -not (Test-Path -LiteralPath "$clean\REPO.exe")) { return @{ Profiles = "$clean\profiles" } }
+        # The mod manager is there, but R.E.P.O. was not selected in it yet
+        if ($leaf -eq 'r2modmanPlus-local' -or $leaf -eq 'DataFolder') { return @{ Profiles = "$clean\REPO\profiles" } }
+        return $null
+    }
+
+    function Find-ModManager {
+        $roots = @("$env:APPDATA\r2modmanPlus-local", "$env:APPDATA\Thunderstore Mod Manager\DataFolder",
+            "$env:LOCALAPPDATA\r2modmanPlus-local", "$env:USERPROFILE\r2modmanPlus-local")
+        foreach ($drive in [IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' -and $_.IsReady }) {
+            foreach ($folder in 'r2modmanPlus-local', 'Games\r2modmanPlus-local') { $roots += Join-Path $drive.RootDirectory.FullName $folder }
+        }
+        # Prefer one where R.E.P.O. is already set up
+        foreach ($root in $roots) { if (Test-Path -LiteralPath "$root\REPO") { return $root } }
+        foreach ($root in $roots) { if (Test-Path -LiteralPath $root) { return $root } }
+        return $null
+    }
+
+    # Ask until the answer is usable. Enter takes the default
+    function Read-Answer([string]$Question, [string]$Default, [scriptblock]$Resolve, [string]$Problem) {
+        for ($attempt = 0; $attempt -lt 5; $attempt++) {
+            Write-Host ''
+            Write-Host $Question
+            if ($Default) { Write-Host "  Press Enter for: $Default" -ForegroundColor Green }
+            $answer = Read-Host '  >'
+            if (-not $answer -or -not $answer.Trim()) { $answer = $Default }
+            if ($answer) {
+                $result = & $Resolve $answer
+                if ($result) { return $result }
+            }
+            Write-Host "  $Problem" -ForegroundColor Yellow
+        }
+        throw 'No usable answer. Nothing was installed.'
     }
 
     # Where the files of a package go. Mod managers keep every package in its own folder
@@ -205,17 +286,56 @@ $scriptRoot = $PSScriptRoot
 
     # --- Find out where to install
 
-    if (-not $GamePath) { $GamePath = Find-Game }
-    if (-not $ProfilesPath -and $Target -ne 'Game') { $ProfilesPath = Find-Profiles }
-    if ($Target -eq 'ModManager' -and -not $ProfilesPath) { throw 'r2modman was not found. Start it once and select R.E.P.O., or use -ProfilesPath.' }
-
-    $managed = $Target -ne 'Game' -and [bool]$ProfilesPath
-    if ($managed) {
-        if (-not $ProfileName -or $ProfileName.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0 -or $ProfileName -match '^\.+$') { throw "'$ProfileName' is not a valid profile name" }
-        $root = Join-Path $ProfilesPath $ProfileName
+    # The game
+    $game = $null
+    if ($GamePath) {
+        $game = Resolve-Game $GamePath
+        if (-not $game) { throw "REPO.exe was not found in '$GamePath'." }
     }
-    else { $root = $GamePath }
+    else {
+        $game = Find-Game
+        if (-not $game -and -not $Yes) {
+            $game = Read-Answer 'R.E.P.O. was not found. Where is it? (the folder with REPO.exe, or your Steam library folder)' '' { param($path) Resolve-Game $path } `
+                'REPO.exe was not found there. In Steam: right-click R.E.P.O. > Manage > Browse local files, and copy that path.'
+        }
+    }
+
+    # The mod manager
+    $manager = $null
+    if ($Target -ne 'Game') {
+        if ($ModManagerPath) {
+            $manager = Resolve-ModManager $ModManagerPath
+            if (-not $manager) { throw "'$ModManagerPath' is not a folder of r2modman or Thunderstore Mod Manager." }
+        }
+        else {
+            $found = Find-ModManager
+            if ($found) { $manager = Resolve-ModManager $found }
+            elseif (-not $Yes) {
+                $question = 'r2modman (or Thunderstore Mod Manager) was not found. Where is its data folder?' + "`n" +
+                    '  In r2modman: Settings > Browse data folder.'
+                $suggestion = ''
+                if ($Target -eq 'Auto') { $suggestion = 'none'; $question += ' "none" installs into the game folder instead.' }
+                $answer = Read-Answer $question $suggestion {
+                    param($path)
+                    if ($path.Trim() -eq 'none' -and $Target -eq 'Auto') { return @{ None = $true } }
+                    Resolve-ModManager $path
+                } 'No mod manager was found there.'
+                if (-not $answer.None) { $manager = $answer }
+            }
+        }
+        if ($Target -eq 'ModManager' -and -not $manager) { throw 'r2modman was not found. Use -ModManagerPath.' }
+    }
+
+    # The profile
+    $managed = [bool]$manager
+    if ($managed) {
+        $profileToUse = if ($ProfileName) { $ProfileName.Trim() } elseif ($manager.Profile) { $manager.Profile } else { 'RepoXR-v0.5.4' }
+        if ($profileToUse.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0 -or $profileToUse -match '^\.*$') { throw "'$ProfileName' is not a valid profile name" }
+        $root = Join-Path $manager.Profiles $profileToUse
+    }
+    else { $root = $game }
     if (-not $root) { throw 'R.E.P.O. was not found. Use -GamePath with the folder of REPO.exe.' }
+    if ($root.Length -gt 130) { throw "The path '$root' is too long for Windows, some files would exceed 260 characters. Use a shorter folder." }
 
     $temp = Join-Path ([IO.Path]::GetTempPath()) ('RepoXR-' + [guid]::NewGuid().ToString('N'))
     [IO.Directory]::CreateDirectory($temp) | Out-Null
@@ -229,14 +349,15 @@ $scriptRoot = $PSScriptRoot
             throw 'The installed DLLs are not the published build.'
         }
 
-        if ($GamePath) {
-            $found = Get-GameVersion $GamePath
+        if ($game) {
+            $found = Get-GameVersion $game
             if ($found -and $found -ne $gameVersion) { Write-Warning "This build is for R.E.P.O. $gameVersion, but you have $found. It may not work." }
         }
         else { Write-Warning 'R.E.P.O. was not found in your Steam libraries.' }
 
         if (Get-Process -Name REPO -ErrorAction SilentlyContinue) { throw 'R.E.P.O. is running. Close it and try again.' }
 
+        Write-Host "Game:          $game"
         Write-Step "Installing into $root"
         [IO.Directory]::CreateDirectory($root) | Out-Null
         foreach ($package in $packages) { Install-Package $package $temp $root $managed }
@@ -257,7 +378,7 @@ $scriptRoot = $PSScriptRoot
         Write-Host 'Done. To play:' -ForegroundColor Green
         Write-Host '  1. Connect your headset to SteamVR and wait until it shows the controllers.'
         if ($managed) {
-            Write-Host "  2. Start (or restart) your mod manager, select R.E.P.O. and the profile '$ProfileName', and press 'Start modded'."
+            Write-Host "  2. Start (or restart) your mod manager, select R.E.P.O. and the profile '$profileToUse', and press 'Start modded'."
         }
         else { Write-Host '  2. Start R.E.P.O. from Steam.' }
         Write-Host '  If the controllers do nothing, close the SteamVR dashboard (see README).'
